@@ -1,0 +1,10 @@
+attribution (last 100 commits, bbartling/open-fdd)
+  Claude          0
+  Codex/OpenAI    0
+  Cursor          142
+  Grok/xAI        0
+  Gemini/Google   0
+  Copilot         0
+  bot-authored    0 of 100 commits (maintainer-agent signal)
+  total AI-trailered lines: 142
+  (bodies never printed — safe to run during a blind engagement)

@@ -1,0 +1,6 @@
+repo: bbartling/open-fdd
+stars: 163
+license: NOASSERTION
+lang: Rust
+pushed: 2026-09-04
+description: Fault Detection Diagnostics (FDD) for HVAC datasets
