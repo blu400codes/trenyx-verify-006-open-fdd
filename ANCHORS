@@ -1,0 +1,8 @@
+# ANCHORS — independent timestamps proving the attack plan predates code review.
+# Rule (runbook Entry #5.1): >=2 independent clocks, >=1 DURABLE (undeletable, unbackdatable).
+plan: 00-preregistration/ATTACK-PLAN.md
+plan_sha256: 5ee8a8db0d24d260e950216151f2f27d0933dd523ad1f3b19e6cccbd6ff38480
+target_pin: bbartling/open-fdd@c20ab483fb9c0d7835b10f09e80fd40389194130
+stamped_utc: 2026-09-04T20:05:08Z
+anchor: opentimestamps 00-preregistration/ATTACK-PLAN.md.ots (Bitcoin block 965548; verify: ots verify 00-preregistration/ATTACK-PLAN.md.ots)
+anchor: github-issue https://github.com/blu400codes/trenyx-verify-006-open-fdd/issues/1 (server created_at 2026-09-09T15:09:14Z; added at publication, per the factory rule: one durable anchor at pre-registration, a second at publication)
