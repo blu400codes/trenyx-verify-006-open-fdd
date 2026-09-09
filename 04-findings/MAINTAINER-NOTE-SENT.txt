@@ -1,0 +1,16 @@
+Title: Parity drift between the SQL and Pandas cookbooks: FC3 tolerance/fan-priority and VAV-2 occupancy handling
+
+Hi,
+
+I run independent verification of AI-built codebases (Trenyx; the published engagements are at https://trenyx.io/audits.html) and did a pre-registered static read of bbartling/open-fdd at c20ab483, the plan hashed and anchored before reading. The security posture held better than the README's LAN-only scoping requires: fail-closed JWT secret on non-loopback binds (`auth.rs:129,135`), authenticated MQTT with client certs, confirm-gated MCP writes. Nothing here is a security report. This is about the README's flagship claim that the 62 rules are "published in two parity-matched flavors … the same rules." Two divergences, both outside the current oracle-parity test coverage:
+
+1. FC3: tolerance is tunable in Pandas, a literal in SQL. `sql_rules/fc3_mat_high.sql:25-26` hardcodes `1.15` in `(mat - 1.15) > (rat + 1.15)` and `> (oa_t + 1.15)` with no registry parameter; the Pandas rule reads `eps_mat/eps_rat/eps_oat` via `_gl36_value(...)` with `MIX_TOL = 1.15` as the default (`open_fdd/rules/cookbook_catalog.py:536` and the fc3 body). An operator who tunes the tolerance changes what the notebook flags without changing what production SQL flags for the same rule id. The two also pick the fan signal differently when both are present: SQL prefers `fan_status` (>0.05) then `fan_cmd` (>0.01); `_fan()` prefers `fan-cmd` then `fan-status` via `as_bool()`.
+
+2. VAV-2: a fractional occupancy value flips between flavors. `sql_rules/vav2_night_setback.sql:12` treats occupancy as an exact-string list (`'unoccupied','unocc','off',…,'0','0.0','no'`); `_unoccupied_mask` (`cookbook_catalog.py:927-938`) also treats any numeric `occ_mode <= 0.05` as unoccupied. A value like `0.03` is occupied in SQL (fault can't fire) and unoccupied in Pandas (fault can fire). A silent, direction-specific disagreement on a plausible real-world reading.
+
+Neither is a bug in either flavor on its own; they're the two implementations answering the same rule id differently. Suggested fix: surface FC3's tolerance as a registry parameter (or pin the Pandas default to non-tunable to match), align the fan-signal priority, and give VAV-2 one shared occupancy-normalization rule; adding FC3 and VAV-2 to the oracle-parity harness would fence both. Happy to re-run the comparison on whatever you ship. The pre-registration hash and the full record publish with the write-up, which says you fixed it.
+
+Minor: the registry appears to list 68 rule ids where the README says 66; worth a recount.
+
+SK
+Trenyx

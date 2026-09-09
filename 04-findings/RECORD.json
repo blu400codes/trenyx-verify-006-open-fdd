@@ -1,0 +1,189 @@
+{
+  "repo": "bbartling/open-fdd",
+  "pinned_sha": "c20ab483fb9c0d7835b10f09e80fd40389194130",
+  "prereg_sha256": "5ee8a8db0d24d260e950216151f2f27d0933dd523ad1f3b19e6cccbd6ff38480",
+  "prereg_anchor": "opentimestamps PLAN.md.ots",
+  "read_on": "2026-09-04",
+  "lang": "Rust (central, mcp, crates/*) + React/TypeScript (frontend/web) + Python (open_fdd pandas cookbook)",
+  "scope": "Static read of: sql_rules/ registry + .sql files, open_fdd/rules/cookbook_catalog.py (pandas cookbook), crates/fdd_rules (oracle parity test harness), services/central/src/auth.rs + routes.rs (auth, MCP-adjacent endpoints), mcp/src/* (MCP sidecar tool table + auth + write-gate), services/mqtt (mosquitto.conf), crates/openfdd_mqtt (cert provisioning/ACL), scripts/openfdd_maint_update_resume.sh + openfdd_stack_up.sh (update/rollback). Did not build/run/test (static only). Did not read: web frontend React internals, os/buildroot edge OT image, PyPI package contents, most of services/central's 2650-line routes.rs beyond the grepped surface.",
+  "src_loc_estimate": "~144,000 lines across .rs/.py/.ts/.tsx (find|wc -l)",
+  "attribution": "attribution (last 100 commits, bbartling/open-fdd)\n  Claude          0\n  Codex/OpenAI    0\n  Cursor          142\n  Grok/xAI        0\n  Gemini/Google   0\n  Copilot         0\n  bot-authored    0 of 100 commits (maintainer-agent signal)\n  total AI-trailered lines: 142\n  (bodies never printed -- safe to run during a blind engagement)",
+  "suite": {
+    "test_files": "309 test paths per frozen pre-registration; grep for test/fn test/#[test]/#[tokio::test] across repo returns 759 matches",
+    "test_count_estimate": "~300-700 (files vs individual test fns; not executed, count taken from static grep, not a test run)",
+    "asserts_invariants_note": "crates/fdd_rules/src/oracle_parity_test.rs is a real cross-implementation oracle harness (oracle_harness.rs) that asserts shipped SQL fault_hours against a pandas-equivalent confirm_fault reference on synthetic fixtures \u2014 genuine parity-testing infrastructure, not a rubber-stamp. But it covers only ~22 of the ~62 rule-id pairs (grep of distinct .sql filenames referenced in oracle_parity_test.rs vs 62 pandas ids in cookbook_catalog.py). No fixture monoculture or tolerance-band assertions observed in the sampled tests; assertions use assert_hours_close with named context, not bare equality \u2014 reasonable practice, not vacuous. Did not execute the suite (static only) so pass/fail status of the ~22 covered pairs is unverified by me, only their existence and design."
+  },
+  "claims_vs_code": [
+    {
+      "claim": "README: '62 fault-detection rules... published in two parity-matched flavors... the same rules' (SQL + Pandas)",
+      "verdict": "violated",
+      "evidence": "sql_rules/registry.yaml has 68 rule_id entries (not 66 as README states, see C6). Of those, cookbook_catalog.py's RULES list has exactly 62 CookbookRule ids, and the two id-sets overlap almost completely by name (68 SQL ids minus 6 non-fault utility ids [AVG-ZONE-TEMP, FAN-RUNTIME-HOURS, FAULT-ELAPSED-HOURS, UTIL-INTERVAL, UTIL-MONTHLY, ZONE-COMFORT-PCT] = 62, matching the pandas catalog's 62 by name). So at the catalog level the '62 rules, same ids' claim holds. BUT for two of those matched-by-name rule pairs I read fully, the actual logic differs: (1) FC3 (sql_rules/fc3_mat_high.sql line 11: hardcoded epsilon literal 1.15 on all three temperature comparisons, no {{MIX_TOL}} placeholder, and registry.yaml's FC3 entry at line 376-388 has no `parameters:` block at all -- not tunable) vs open_fdd/rules/cookbook_catalog.py fc3() (line 623-635: reads eps_mat/eps_rat/eps_oat independently from the params dict, each defaulting to MIX_TOL=1.15 at line 536, but overridable) -- an operator-set tolerance override reaches pandas FC3 but is silently ignored by SQL FC3. (2) FC3 fan-on proof: SQL (fc3_mat_high.sql lines 9-13) prioritizes fan_status (threshold >0.05) over fan_cmd (threshold >0.01), defaulting fan_on=1 if both missing; pandas _fan() (cookbook_catalog.py lines 582-587) prioritizes fan-cmd over fan-status, and treats fan-status via as_bool() (no 0.05 threshold) -- when both signals are present and disagree, the two flavors read different reference. (3) VAV-2 (sql_rules/vav2_night_setback.sql lines 11-12) treats occ_mode as unoccupied only via an exact string match list including '0'/'0.0'; pandas _unoccupied_mask() (cookbook_catalog.py lines 927-938, also inlined at 1278-1283) additionally treats ANY numeric occ_mode <= 0.05 as unoccupied. A fractional occupancy signal like 0.03 is 'occupied' (no fault possible) under SQL VAV-2 but 'unoccupied' (fault-eligible) under pandas vav2() -- the two flavors disagree on whether a real data point is even eligible for this fault, before any threshold math runs. None of these three divergence sites are among the ~22 rule pairs covered by crates/fdd_rules/src/oracle_parity_test.rs, i.e. the project's own automated cross-check would not catch them."
+    },
+    {
+      "claim": "README: '62 cookbook rules (66 SQL registry ids)' (C6)",
+      "verdict": "violated (minor, INFO-grade)",
+      "evidence": "sql_rules/registry.yaml contains 68 `rule_id:` entries (python -c count), not 66. cookbook_catalog.py's RULES list contains exactly 62 CookbookRule instances, matching the 62 claim. The registry-id count is off by 2 from the README's stated 66."
+    },
+    {
+      "claim": "documented OPENFDD_JWT_SECRET='change-me' / OPENFDD_ADMIN_PASSWORD='change-me' run \u2014 is the placeholder silently accepted, and is there a hardcoded fallback secret when unset? (C3)",
+      "verdict": "holds (no hidden fallback; placeholder is structurally rejected off-loopback)",
+      "evidence": "services/central/src/auth.rs: is_loopback_bind() (lines 100-105) + assert_bind_auth_policy() (lines 108-150). Non-loopback bind fails closed with an explicit error if OPENFDD_JWT_SECRET is unset/empty (lines 126-132), or if it is set but under 32 characters (lines 133-138, 'change-me' is 9 chars so this would reject it automatically on any non-loopback bind), or if OPENFDD_ADMIN_PASSWORD is unset (lines 139-148). AuthConfig::load() (lines 152-186) never substitutes a default/hardcoded secret when the env var is unset -- `secret` stays None, `required()` returns false, and central logs 'auth_enabled=false ... open mode is loopback-only' (line 164). An explicit escape hatch OPENFDD_ALLOW_OPEN_BIND=1 (lines 116-125) bypasses this for CI/smoke, with a warn! log ('not internet-ready'). No hardcoded fallback secret found anywhere in auth.rs."
+    },
+    {
+      "claim": "MCP sidecar token (OPENFDD_MCP_TOKEN) scope: does it confer full admin? Can any tool mutate rules/config or reach the shell? (C4)",
+      "verdict": "design_note (full-admin scope is documented/intentional; write tools are real but doubly gated; one advertised write tool has no live backing endpoint)",
+      "evidence": "mcp/src/bridge.rs credentials_hint() (lines 10-39) documents the 'integrator' role as 'MCP JWT + dashboard admin -- preferred for OPENFDD_MCP_TOKEN' -- i.e. the MCP token is explicitly meant to be admin-equivalent, by design and by doc. mcp/src/protocol.rs tools_list() (~lines 60-200) exposes write tools that would mutate config/rules if live: openfdd_fdd_rules_save, openfdd_fdd_rules_activate, openfdd_fdd_run, openfdd_model_assignments_save, openfdd_csv_import_execute, openfdd_rules_batch, openfdd_reports_* writes. Every one of these is gated by mcp/src/gate.rs require_write_confirm() (lines 6-16): requires OPENFDD_MCP_ALLOW_WRITES=1 (an operator-set env flag, off by default) AND a per-call confirm:true. Checked the two scariest-sounding tools: openfdd_fdd_rules_save/openfdd_fdd_rules_activate reference POST /api/fdd-rules and POST /api/fdd-rules/{id}/activate -- grepping services/central/src/routes.rs's full route table (lines ~90-260) finds only `GET /api/fdd-rules` (line 125, fdd_rules_list) registered; no POST/activate handler exists in the routes I read, so these two MCP tools appear to reference an endpoint that does not exist server-side (would 404, not a live mutation path -- flag as documentation/tool-table drift, not a live escalation). openfdd_fdd_run *is* live (routes.rs line 115, POST /api/fdd/run) and its handler (line 1028) explicitly rejects any request carrying a raw `sql` field: 'raw SQL rejected on /api/fdd/run; use mode=registry with typed params' -- a real server-side safeguard against MCP-driven arbitrary SQL execution. Did not trace whether fdd_run enforces a JWT role check via router-level middleware (the handler signature itself takes no User/role extractor); not confirmed either way given time budget -- noted as a gap in my read, not a finding."
+    },
+    {
+      "claim": "MQTTS ingest -- can an unauthenticated client publish points; does central validate point identity? (C5)",
+      "verdict": "holds (exceeds the LAN-scoping baseline: mTLS is enforced, not just network placement)",
+      "evidence": "services/mqtt/mosquitto.conf: `allow_anonymous false`, `require_certificate true`, `use_identity_as_username true`, cafile/certfile/keyfile all set, `acl_file` configured -- an unauthenticated (uncertified) client cannot connect at all, let alone publish. crates/openfdd_mqtt/src/provision.rs provision_edge_kit() (lines 34-157) issues a per-edge client certificate and writes a per-edge mosquitto ACL scoping that edge's user (`edge:<site_id>:<edge_id>`) to only its own topic-write patterns (lines 129-144, via TopicBuilder::edge_acl_patterns()). I did not verify the topic pattern granularity is fine enough to prevent one legitimately-provisioned edge from publishing under a *different* equipment_id within the same site/edge namespace (would need to read openfdd_contracts::TopicBuilder in full) -- flagged as a residual open question, not a confirmed gap."
+    },
+    {
+      "claim": "update script 'pull, backup, rollback if health fails' -- does rollback actually restore, or can a failed update lose the historian? (C8)",
+      "verdict": "latent (mechanism exists and correctly restores container images, but the 'backup' does not cover data)",
+      "evidence": "scripts/openfdd_maint_update_resume.sh snapshot() (lines ~108-142) saves: a redacted copy of .env, `docker ps` output, and old image digests to $SNAP_DIR/state.json. It does NOT snapshot the Arrow/Feather historian, the SQL rule registry, or any application database. rollback() (lines ~144-186) restores the OLD container image digests via OPENFDD_*_IMAGE env vars and re-runs openfdd_stack_up.sh --no-pull -- this correctly undoes a bad *code* deploy. But if the new version's startup/migration path had already mutated on-disk historian data before the health check (openfdd_stack_wait_health, scripts/openfdd_stack_up.sh line 110) failed, that data mutation is not backed up and rollback cannot undo it -- the script only ever reverts which container image runs, never what the containers wrote to the mounted volumes. I found no evidence in the scripts I read of an active migration step that mutates the historian in place (scripts/openfdd_stack_up.sh has no migration/historian-touching code in the ~122 lines I read), so this is a latent gap in the backup design rather than a demonstrated data-loss bug today."
+    }
+  ],
+  "invariants": [
+    {
+      "id": "I5-safe-boundary",
+      "name": "auth fails closed off-loopback; unrecognized/placeholder secret does not silently succeed",
+      "verdict": "holds",
+      "evidence": "services/central/src/auth.rs lines 108-150, 152-186",
+      "severity": "info"
+    },
+    {
+      "id": "I7-config-rejection",
+      "name": "invalid/too-short JWT secret is rejected, not defaulted",
+      "verdict": "holds",
+      "evidence": "services/central/src/auth.rs lines 133-138 (32-char minimum enforced on non-loopback binds)",
+      "severity": "info"
+    },
+    {
+      "id": "I3-exits-fire / I4-gates-gate (MCP write path)",
+      "name": "write-tool gate (env flag + confirm) is actually enforced before a mutating MCP tool proceeds",
+      "verdict": "holds",
+      "evidence": "mcp/src/gate.rs require_write_confirm(), unit-tested at lines 22-30",
+      "severity": "info"
+    },
+    {
+      "id": "C1-parity",
+      "name": "SQL and Pandas rule flavors compute the same fault decision for the same input, rule-for-rule",
+      "verdict": "violated",
+      "evidence": "see claims_vs_code C1 entry: FC3 tolerance-tunability + fan-priority divergence; VAV-2 occupancy-threshold divergence",
+      "severity": "medium-high",
+      "scope_note": "divergence found in 2 of 62 rule pairs sampled outside the oracle-tested set; the ~22 oracle-covered pairs were not independently re-derived by me beyond reading their SQL/pandas source, which appeared consistent"
+    },
+    {
+      "id": "C2-silent-nondetection",
+      "name": "a data-quality edge case (ambiguous/fractional sensor value) does not cause one flavor to silently miss a fault the other flavor catches",
+      "verdict": "violated",
+      "evidence": "VAV-2: a fractional occ_mode value in (0, 0.05] is 'occupied' (no-fault-eligible) under SQL, 'unoccupied' (fault-eligible) under pandas -- sql_rules/vav2_night_setback.sql lines 11-12 vs cookbook_catalog.py lines 927-938",
+      "severity": "medium-high"
+    },
+    {
+      "id": "C3-secret-handling",
+      "name": "no hardcoded fallback secret when OPENFDD_JWT_SECRET/OPENFDD_ADMIN_PASSWORD are unset",
+      "verdict": "holds",
+      "evidence": "services/central/src/auth.rs AuthConfig::load(), lines 152-186",
+      "severity": "info",
+      "scope_note": "documented change-me default is additionally structurally blocked off-loopback by the 32-char minimum, exceeding the design_note baseline"
+    },
+    {
+      "id": "C4-mcp-scope",
+      "name": "MCP token privilege is bounded / mutating tools require more than possession of the token",
+      "verdict": "design_note",
+      "evidence": "MCP token is documented as admin-equivalent by design (mcp/src/bridge.rs); mutating tools require OPENFDD_MCP_ALLOW_WRITES=1 + per-call confirm:true (mcp/src/gate.rs); the raw-SQL-authoring tool pair (fdd_rules_save/activate) has no live backing route in services/central/src/routes.rs as read",
+      "severity": "medium",
+      "scope_note": "did not confirm router-level role middleware on POST /api/fdd/run"
+    },
+    {
+      "id": "C5-mqtt-ingest-auth",
+      "name": "unauthenticated/unidentified clients cannot publish into the historian",
+      "verdict": "holds",
+      "evidence": "services/mqtt/mosquitto.conf (allow_anonymous false, require_certificate true); crates/openfdd_mqtt/src/provision.rs per-edge cert + ACL issuance",
+      "severity": "info",
+      "scope_note": "did not verify ACL topic-pattern granularity prevents cross-equipment spoofing within one edge's own namespace"
+    },
+    {
+      "id": "C8-rollback-data-safety",
+      "name": "a failed update's rollback restores the system to its pre-update state, including data",
+      "verdict": "latent",
+      "evidence": "scripts/openfdd_maint_update_resume.sh snapshot()/rollback() -- backs up env + image digests only, never the historian/database; no migration-mutates-historian path was found in scripts/openfdd_stack_up.sh, so the gap is latent rather than demonstrated",
+      "severity": "medium"
+    }
+  ],
+  "parity_table": [
+    {
+      "rule": "FC3",
+      "sql_site": "sql_rules/fc3_mat_high.sql:11-13 (hardcoded epsilon 1.15, no registry parameters block)",
+      "pandas_site": "open_fdd/rules/cookbook_catalog.py:623-635 (eps_mat/eps_rat/eps_oat from params, default MIX_TOL=1.15 at line 536)",
+      "difference": "pandas tolerance is operator-tunable per axis; SQL tolerance is a hardcoded constant with no way to override it via the registry/dashboard"
+    },
+    {
+      "rule": "FC3",
+      "sql_site": "sql_rules/fc3_mat_high.sql:9-13 (fan_status priority, 0.05 threshold; fan_cmd 0.01 threshold; default ON if both missing)",
+      "pandas_site": "open_fdd/rules/cookbook_catalog.py:582-587 (_fan(): fan-cmd priority over fan-status; fan-status read via as_bool(), no 0.05 threshold)",
+      "difference": "when both fan_status and fan_cmd are present and disagree, SQL and pandas select a different signal and apply different on/off thresholds"
+    },
+    {
+      "rule": "VAV-2",
+      "sql_site": "sql_rules/vav2_night_setback.sql:11-12 (exact string match on occ_mode incl. '0'/'0.0')",
+      "pandas_site": "open_fdd/rules/cookbook_catalog.py:927-938, 1278-1283 (_unoccupied_mask(): numeric occ_mode <= 0.05 also counts as unoccupied)",
+      "difference": "a fractional occ_mode value like 0.03 is 'occupied' under SQL (fault cannot fire) but 'unoccupied' under pandas (fault can fire) -- a silent, direction-specific disagreement on a plausible real-world data value"
+    }
+  ],
+  "most_damning_claim": "README's '62 fault-detection rules published in two parity-matched flavors ... the same rules' is contradicted by FC3's tolerance parameter being tunable in the pandas flavor (open_fdd/rules/cookbook_catalog.py:623-635, eps_mat/eps_rat/eps_oat from params) but hardcoded and non-tunable in the SQL flavor (sql_rules/fc3_mat_high.sql:25-26, literal 1.15, no registry parameters block for FC3) -- an operator adjusting the tolerance dashboard-side changes what the pandas cookbook flags without changing what the production SQL registry flags for the identical rule id.",
+  "security_escalation": {
+    "flag": false,
+    "note": "No live, unauthenticated-exploitable escalation found. Auth fails closed off-loopback with no hardcoded fallback secret (services/central/src/auth.rs). MQTT ingest requires mTLS client certs, allow_anonymous false (services/mqtt/mosquitto.conf). MCP write tools require an operator-set env flag plus per-call confirm, and the one live rule-execution endpoint explicitly rejects raw SQL (services/central/src/routes.rs:1028-1032). Two MCP tool entries (fdd_rules_save/activate) advertise write capability against an endpoint that does not appear to exist server-side -- a documentation/dead-code gap, not an exploit. Update rollback does not cover data (scripts/openfdd_maint_update_resume.sh) -- a latent operational-safety gap, not a security escalation."
+  },
+  "tier_m": {
+    "promote": "hold",
+    "why": "Two genuine, citable, non-security correctness findings (FC3 tunability/fan-priority drift, VAV-2 occupancy-threshold drift) directly falsify the flagship 'the same rules' parity claim in a small but real way, both landing outside the project's own oracle-parity test coverage -- exactly the failure mode the pre-registration predicted. No security escalation was found; auth, MQTT ingest, and MCP write-gating all held up better than the LAN-scoping baseline required. The read covered the claim-bearing surfaces named in the plan (rule catalogs, auth, MCP, MQTT, update script) but not the full 144k-LOC repo (React frontend internals, most of central's routes.rs, the edge/OT buildroot image were not read) -- HOLD reflects real findings worth a maintainer's attention plus an intentionally partial read, not a security-flag-forced hold.",
+    "toolchain": "Rust/cargo (read only, never built/run) + Python (read only, never executed) + yaml/sql static reads; grep/python3 used only for counting and text extraction, no target code executed"
+  },
+  "prediction_graded": "CORRECT. Plan predicted 1-2 correctness findings from C1 parity drift and C2 NaN/missing handling, and 0 security escalations. Found exactly that shape: 2 correctness findings (FC3 drift counted as one rule-pair finding with two facets; VAV-2 drift), both landing in the C1/C2 space the plan named, and 0 security escalations across C3/C4/C5/C8. The plan's framing that 'if the rule sets are truly parity-matched, that is a notable clean result' also partially applies: the catalog-level id-count match (62=62) is clean, and the ~22 oracle-tested pairs showed no divergence in my reading -- the drift is real but narrower than a wholesale parity failure.",
+  "one_line": "The 62-rule SQL/Pandas catalogs match by id and mostly by test coverage, but at least two rule pairs (FC3, VAV-2) genuinely diverge in threshold tunability and NaN/occupancy-boundary handling, outside the project's own oracle-parity test net; no security escalation found, and MQTT/auth/MCP write-gating all held up.",
+  "status": "complete",
+  "spot_check": {
+    "by": "flagship (Fable 5.1), 2026-09-04 \u2014 cited sites re-read at c20ab483",
+    "headline": "CONFIRMED with a LINE CORRECTION: the SQL literal is at sql_rules/fc3_mat_high.sql:25-26 (`(mat - 1.15) > (rat + 1.15)` / `(oa_t + 1.15)`), not :11-13 (those are the fan_on CASE). Substance exact: no parameter/registry placeholder for the tolerance in SQL; pandas fc3 reads eps_mat/eps_rat/eps_oat via _gl36_value(p, ..., MIX_TOL) with MIX_TOL = 1.15 (cookbook_catalog.py:536) \u2014 tunable per axis. Fan-signal priority divergence confirmed: SQL :10-13 prefers fan_status (>0.05) then fan_cmd (>0.01), default ON; pandas _fan() prefers fan-cmd then fan-status via as_bool(), default 1.0. VAV-2 confirmed: SQL vav2_night_setback.sql:12 exact-string list (incl. '0','0.0'); pandas _unoccupied_mask (cookbook_catalog.py:927-938) adds numeric occ_num <= 0.05 \u2014 a numeric 0.03 is unoccupied in pandas, occupied in SQL.",
+    "verdicts_changed": [
+      "most_damning_claim citation corrected :11-13 -> :25-26 (substance unchanged)"
+    ],
+    "headline_severity": "medium-high as pre-committed (C1 parity divergence on the flagship claim); no security escalation. Security-held claims CONFIRMED at source: services/central/src/auth.rs:129/135 fail-closed (non-loopback bind requires OPENFDD_JWT_SECRET, >=32 chars); services/mqtt/mosquitto.conf: allow_anonymous false, require_certificate true. Registry count (68 vs README 66) is INFO and analyst-reported \u2014 the flagship's YAML count did not parse the key shape; not independently re-counted.",
+    "security": false
+  },
+  "verification_coverage": {
+    "invariants_identified": 9,
+    "independently_tested": 9,
+    "holds": 5,
+    "violated": 2,
+    "unclear_or_na": 0,
+    "coverage_pct": 100,
+    "definition": "tested = a verdict of holds/violated/latent/design_note reached from cited code; unclear and n_a are NOT counted as tested. Coverage is the metric a buyer can compare across releases; it is not a bug count."
+  },
+  "disclosure": {
+    "sent_utc": "2026-09-08T18:47:55Z",
+    "kind": "public maintainer note (correctness / claims-vs-code; no security content)",
+    "channel": "public GitHub issue (gh, operator account)",
+    "issue": "https://github.com/bbartling/open-fdd/issues/875",
+    "draft": "business/audit-004-open-fdd-MAINTAINER-NOTE-DRAFT.md",
+    "body_sha256": "1734f06fe9e98c4702fa1016327b9a819aa68020709be2370604cc8609cf2d43",
+    "anchor": "business/audit-004-open-fdd-MAINTAINER-NOTE-DRAFT.SENT-BODY.txt.ots",
+    "findings": "SQL/Pandas parity drift: FC3 tolerance literal vs tunable + fan-signal priority; VAV-2 fractional occupancy flips; registry 68 vs README 66",
+    "window": "public note; record publishes with the write-up",
+    "state": "POSTED; MAINTAINER FIXED 3.3.41 (3bedbf9); RE-CHECKED 2026-09-09 \u2014 ready for a maintainer-fixed audits entry",
+    "response": "2026-09-08: maintainer (Ben) replied ~5 min after posting, thanked the report, said he'll render a fix asap and appreciated the testing; expressed interest in rigorous stress testing between updates (a genuine opening, NOT acted on per the no-paid-offers decision). Real engagement. Courtesy reply posted 2026-09-08T19:04:23Z (re-check offer on the specific fix, no ask). 2026-09-08 later: maintainer shipped the fix, merged it and closed #875 (operator report). Re-check owed: the SQL/Pandas comparison on FC3 and VAV-2 against the merged fix, then a 'maintainer-fixed' audits-page entry.",
+    "recheck": {
+      "when": "2026-09-09",
+      "fix_commit": "3bedbf9 fix(3.3.41): FC3 + VAV-2 cookbook parity (#875) (#877)",
+      "release": "3.3.41",
+      "result": "CHECKS OUT, all four points: FC3 tolerance is now the registry parameters {{EPS_MAT}}/{{EPS_RAT}}/{{EPS_OAT}} (sql_rules/fc3_mat_high.sql:27; registry.yaml eps_rat/eps_oat defaults 1.15); fan-signal priority aligned, SQL fan_status then fan_cmd (:12-13) and Pandas _fan fan-status then fan-cmd (open_fdd/rules/cookbook_catalog.py:582-587, comment cites #875); VAV-2 SQL now treats numeric occ_mode <= 0.05 as unoccupied (sql_rules/vav2_night_setback.sql:15-16) matching _unoccupied_mask (:928-938); oracle_parity_test.rs now covers fc3_mat_high and vav2_night_setback (+164 lines); README recount 62 public rules / 68 registry ids. Verified on main 5aed663 (statically).",
+      "comment": "https://github.com/bbartling/open-fdd/issues/875#issuecomment-5604055340",
+      "posted": "2026-09-09T15:04:26Z"
+    }
+  }
+}
